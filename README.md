@@ -37,12 +37,3 @@ On a new checkout, Flutter generates `android/local.properties` with your Flutte
 ## Install / permissions
 
 Install the APK normally, then grant root access to NetBand in the installed root manager (Magisk/KernelSU/etc.). Android does not have a normal manifest permission that grants root. Do not use on networks you do not own or administer.
-
-## Build automatically with GitHub Actions
-
-1. Create a GitHub repository and upload/push the contents of this folder to its root (so `.github/workflows/build-apk.yml` is at the repository root).
-2. Open **Actions** and enable workflows if GitHub asks.
-3. Run **Build NetBand APK** with **Run workflow**, or push a commit to `main`/`master`.
-4. When the run succeeds, open that workflow run and download the `netband-release-apk` artifact. It contains `app-release.apk`.
-
-The workflow sets up Java 17 and Flutter stable, completes missing generated Android wrapper scaffolding, runs `flutter pub get` and `flutter analyze`, builds the release APK, and uploads it as a downloadable artifact. A failed analysis/build will fail the workflow instead of uploading a fake or empty APK.

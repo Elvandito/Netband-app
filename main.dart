@@ -102,7 +102,7 @@ class _DashboardState extends State<Dashboard> {
       actions: [IconButton(onPressed: busy ? null : () => refresh(scan: true), icon: const Icon(Icons.radar), tooltip: 'Scan LAN')],),
     body: RefreshIndicator(onRefresh: () => refresh(scan: true), child: ListView(padding: const EdgeInsets.fromLTRB(16, 4, 16, 28), children: [
       Container(padding: const EdgeInsets.all(18), decoration: BoxDecoration(color: panel, borderRadius: BorderRadius.circular(22),
-        border: Border.all(color: accent.withOpacity(.18))),
+        border: Border.all(color: accent.withValues(alpha: .18))),
         child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
           Row(children: [Container(width: 10, height: 10, decoration: BoxDecoration(color: root ? accent : Colors.orangeAccent, shape: BoxShape.circle)), const SizedBox(width: 9),
             Text(root ? 'ROOT ACCESS AVAILABLE' : 'ROOT ACCESS REQUIRED', style: TextStyle(color: root ? accent : Colors.orangeAccent, fontSize: 11, fontWeight: FontWeight.bold, letterSpacing: 1.1))]),
@@ -126,12 +126,12 @@ class _DashboardState extends State<Dashboard> {
     floatingActionButton: FloatingActionButton.extended(onPressed: busy ? null : () => refresh(scan: true), icon: const Icon(Icons.radar), label: const Text('Scan LAN')),
   );
 
-  Widget _metric(String label, String value) => Column(crossAxisAlignment: CrossAxisAlignment.start, children: [Text(label, style: const TextStyle(fontSize: 10, color: Colors.white45, letterSpacing: 1)), const SizedBox(height: 5), Text(value, style: const TextStyle(fontSize: 14, fontWeight: FontWeight.w600))]);
+  Widget _metric(String label, String value) => Column(crossAxisAlignment: CrossAxisAlignment.start, children: [Text(label, style: const TextStyle(fontSize: 10, color: Color(0x73FFFFFF), letterSpacing: 1)), const SizedBox(height: 5), Text(value, style: const TextStyle(fontSize: 14, fontWeight: FontWeight.w600))]);
 
   Widget _deviceCard(Device d) => Card(margin: const EdgeInsets.only(bottom: 10), shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(17)), child: Padding(padding: const EdgeInsets.all(14), child: Column(children: [
-    Row(children: [Container(width: 42, height: 42, decoration: BoxDecoration(color: accent.withOpacity(.10), borderRadius: BorderRadius.circular(13)), child: const Icon(Icons.devices, color: accent)), const SizedBox(width: 12),
+    Row(children: [Container(width: 42, height: 42, decoration: BoxDecoration(color: accent.withValues(alpha: .10), borderRadius: BorderRadius.circular(13)), child: const Icon(Icons.devices, color: accent)), const SizedBox(width: 12),
       Expanded(child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [Text(d.ip, style: const TextStyle(fontSize: 15, fontWeight: FontWeight.bold)), const SizedBox(height: 3), Text('${d.mac}  ·  ${d.state}', style: const TextStyle(color: Colors.white54, fontSize: 11))])),
-      if (limits.containsKey(d.ip)) Container(padding: const EdgeInsets.symmetric(horizontal: 9, vertical: 5), decoration: BoxDecoration(color: accent.withOpacity(.12), borderRadius: BorderRadius.circular(8)), child: Text(limits[d.ip]!, style: const TextStyle(color: accent, fontSize: 10))),
+      if (limits.containsKey(d.ip)) Container(padding: const EdgeInsets.symmetric(horizontal: 9, vertical: 5), decoration: BoxDecoration(color: accent.withValues(alpha: .12), borderRadius: BorderRadius.circular(8)), child: Text(limits[d.ip]!, style: const TextStyle(color: accent, fontSize: 10))),
     ]), const SizedBox(height: 12), Row(children: [Expanded(child: OutlinedButton.icon(onPressed: busy ? null : () => showLimit(d), icon: const Icon(Icons.speed, size: 16), label: const Text('Limit'))), const SizedBox(width: 8),
       Expanded(child: OutlinedButton.icon(onPressed: busy ? null : () => confirmBlock(d), icon: const Icon(Icons.block, size: 16), label: const Text('Block'))), const SizedBox(width: 8),
       IconButton.filledTonal(onPressed: busy ? null : () => action('unlimit', d), icon: const Icon(Icons.restart_alt), tooltip: 'Remove NetBand rules')])

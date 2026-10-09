@@ -52,7 +52,7 @@ class _DashboardState extends State<Dashboard> {
       root = result['root'] == true;
       iface = '${result['interface'] ?? '—'}'; gateway = '${result['gateway'] ?? '—'}'; localIp = '${result['localIp'] ?? '—'}';
       devices = (result['devices'] as List? ?? []).map((e) => Device.fromMap(Map<dynamic, dynamic>.from(e))).toList();
-      message = '${devices.length} device(s) found';
+      message = '${result['message'] ?? '${devices.length} device(s) found'}';
     } on PlatformException catch (e) { message = e.message ?? 'Backend error'; }
     catch (e) { message = 'Unable to read network: $e'; }
     if (mounted) setState(() => busy = false);

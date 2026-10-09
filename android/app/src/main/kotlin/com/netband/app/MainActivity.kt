@@ -57,31 +57,78 @@ class MainActivity : FlutterActivity() {
         return c.output
     }
 
+    private fun interfaces(): List<String> = try {
+        root("ls /sys/class/net 2>/dev/null", 5).output.lines().map { it.trim() }.filter { it.isNotEmpty() && it != "lo" }
+    } catch (_: Exception) { emptyList() }
+
+    private fun ipv4Of(iface: String): String? = try {
+        root("ip -o -4 addr show dev ${quote(iface)} 2>/dev/null | awk '{print \$4}' | head -n1", 5)
+            .output.substringBefore('/').trim().takeIf { ipRegex.matches(it) }
+    } catch (_: Exception) { null }
+
+    private fun defaultRoute(): String = try {
+        root("ip -o route show default 2>/dev/null | head -n1", 5).output.trim()
+    } catch (_: Exception) { "" }
+
+    // The default route frequently points at cellular (rmnet_data0) or a tether, so prefer wlan* when
+    // picking the LAN interface; a wrong guess makes every neighbor-table query come back empty.
+    private fun pickInterface(): Pair<String, String?> {
+        val ifaces = interfaces()
+        val routeIface = Regex("\\bdev\\s+(\\S+)").find(defaultRoute())?.groupValues?.get(1)
+        val ordered = (ifaces.filter { it.startsWith("wlan") } + listOfNotNull(routeIface) + ifaces).distinct()
+        for (iface in ordered) {
+            val ip = ipv4Of(iface) ?: continue
+            if (ip.startsWith("127.")) continue
+            return iface to ip
+        }
+        return (ifaces.firstOrNull { it.startsWith("wlan") } ?: routeIface ?: "wlan0") to null
+    }
+
+    private fun readNeighbors(iface: String): String {
+        val perDev = try { root("ip neigh show dev ${quote(iface)} 2>/dev/null", 8).output } catch (_: Exception) { "" }
+        if (perDev.isNotBlank()) return perDev
+        return try { root("ip neigh show 2>/dev/null", 8).output } catch (_: Exception) { "" }
+    }
+
     private fun networkStatus(doScan: Boolean): Map<String, Any> {
         val rootAvailable = try { root("id", 4).let { it.code == 0 && it.output.contains("uid=0") } } catch (_: Exception) { false }
-        val iface = try { root("ip -o route show default 2>/dev/null | awk '{print \$5}' | head -n1", 5).output.trim().ifBlank { root("getprop wifi.interface", 3).output.trim().ifBlank { "wlan0" } } } catch (_: Exception) { "wlan0" }
-        val safeIface = iface.trim().takeIf { it.matches(Regex("^[a-zA-Z0-9_.:-]{1,32}$")) } ?: "wlan0"
-        if (!rootAvailable) return mapOf("root" to false, "interface" to safeIface, "gateway" to "—", "localIp" to "—", "devices" to emptyList<Map<String, String>>())
+        if (!rootAvailable) return mapOf(
+            "root" to false, "interface" to "—", "gateway" to "—", "localIp" to "—",
+            "devices" to emptyList<Map<String, String>>(), "message" to "Root access is required to read the neighbor table."
+        )
+        val (iface, localIp) = pickInterface()
+        val gateway = Regex("\\bvia\\s+(\\d+(?:\\.\\d+){3})").find(defaultRoute())?.groupValues?.get(1) ?: "—"
+        var note = ""
         if (doScan) {
-            // Populate the kernel neighbor cache on the local /24 without requiring Termux/Python.
-            val addr = root("ip -o -4 addr show dev ${quote(safeIface)} | awk '{print \$4}' | head -n1", 4).output.substringBefore('/')
-            if (addr.matches(ipRegex)) {
-                val prefix = addr.substringBeforeLast('.')
-                root("for n in \$(seq 1 254); do (ping -c 1 -W 1 \"$prefix.\$n\" >/dev/null 2>&1) & [ \$(jobs -p | wc -l) -ge 24 ] && wait; done; wait; ip neigh show dev ${quote(safeIface)}", 35)
+            if (localIp == null) {
+                note = "No IPv4 address on $iface"
+            } else {
+                val prefix = localIp.substringBeforeLast('.')
+                val seed = if (gateway != "—") "ping -c 1 -W 1 -n ${quote(gateway)} >/dev/null 2>&1; " else ""
+                try {
+                    root(seed + "ip neigh flush dev ${quote(iface)} nud failed 2>/dev/null; ip neigh flush dev ${quote(iface)} nud incomplete 2>/dev/null; ip neigh flush dev ${quote(iface)} nud none 2>/dev/null; true", 10)
+                } catch (_: Exception) { }
+                note = try {
+                    root("for n in \$(seq 1 254); do (ping -c 1 -W 1 -n \"$prefix.\$n\" >/dev/null 2>&1) & [ \$(jobs -p | wc -l) -ge 32 ] && wait; done; wait", 90)
+                    "Scanned $localIp on $iface"
+                } catch (e: Exception) { "Sweep on $iface stopped early (${e.message})" }
             }
         }
-        val route = root("ip -o route show default 2>/dev/null | head -n1", 4).output
-        val gateway = Regex("\\bvia\\s+(\\d+(?:\\.\\d+){3})").find(route)?.groupValues?.get(1) ?: "—"
-        val local = root("ip -o -4 addr show dev ${quote(safeIface)} 2>/dev/null | awk '{print \$4}' | head -n1", 4).output.substringBefore('/')
-        val neigh = root("ip neigh show dev ${quote(safeIface)} 2>/dev/null", 5).output
+        val neigh = readNeighbors(iface)
         val devices = neigh.lines().mapNotNull { line ->
             val ip = line.trim().split(Regex("\\s+" )).firstOrNull() ?: return@mapNotNull null
             if (!ipRegex.matches(ip)) return@mapNotNull null
-            val mac = Regex("lladdr\\s+([0-9a-fA-F:]{17})").find(line)?.groupValues?.get(1) ?: "—"
-            val state = line.trim().split(Regex("\\s+")).lastOrNull() ?: "UNKNOWN"
+            val mac = Regex("lladdr\\s+([0-9a-fA-F:]{17})").find(line)?.groupValues?.get(1)?.lowercase() ?: return@mapNotNull null
+            if (mac == "00:00:00:00:00:00") return@mapNotNull null
+            val state = line.trim().split(Regex("\\s+")).lastOrNull()?.uppercase() ?: "UNKNOWN"
+            if (state == "FAILED" || state == "INCOMPLETE" || state == "NONE") return@mapNotNull null
             mapOf("ip" to ip, "mac" to mac, "state" to state)
         }.distinctBy { it["ip"] }.sortedBy { it["ip"] }
-        return mapOf("root" to true, "interface" to safeIface, "gateway" to gateway, "localIp" to local, "devices" to devices)
+        val status = if (note.isEmpty()) "${devices.size} device(s)" else "$note - ${devices.size} device(s)"
+        return mapOf(
+            "root" to true, "interface" to iface, "gateway" to gateway, "localIp" to (localIp ?: "—"),
+            "devices" to devices, "message" to status
+        )
     }
 
     private fun classId(ip: String): Int {
@@ -91,8 +138,7 @@ class MainActivity : FlutterActivity() {
     private fun targetClass(ip: String) = "1:${classId(ip).toString(16)}"
 
     private fun commandLimit(ip: String, rate: Int): Map<String, Any> {
-        val iface = root("ip -o route show default | awk '{print \$5}' | head -n1", 4).output.trim().ifBlank { "wlan0" }
-        require(iface.matches(Regex("^[a-zA-Z0-9_.:-]{1,32}$"))) { "Could not determine network interface" }
+        val iface = pickInterface().first
         val cls = targetClass(ip)
         val prio = classId(ip)
         val marker = "/data/local/tmp/netband_owns_htb_" + iface.replace(Regex("[^a-zA-Z0-9]"), "_")

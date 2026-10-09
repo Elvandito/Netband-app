@@ -5,7 +5,16 @@ android {
     compileSdk = flutter.compileSdkVersion
     ndkVersion = flutter.ndkVersion
     compileOptions { sourceCompatibility = JavaVersion.VERSION_17; targetCompatibility = JavaVersion.VERSION_17 }
-    kotlinOptions { jvmTarget = JavaVersion.VERSION_17.toString() }
     defaultConfig { applicationId = "com.netband.app"; minSdk = 29; targetSdk = 35; versionCode = 1; versionName = "1.0.0" }
+    buildTypes {
+        release {
+            signingConfig = signingConfigs.getByName("debug")
+        }
+    }
+}
+kotlin {
+    compilerOptions {
+        jvmTarget = org.jetbrains.kotlin.gradle.dsl.JvmTarget.JVM_17
+    }
 }
 flutter { source = "../.." }

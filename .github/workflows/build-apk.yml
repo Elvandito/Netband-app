@@ -64,7 +64,20 @@ jobs:
         run: flutter test
 
       - name: Build release APK
-        run: flutter build apk --release
+        run: |
+          BUILD_STATUS=0
+          flutter build apk --release || BUILD_STATUS=$?
+          echo "===== APK inventory ====="
+          find "$GITHUB_WORKSPACE" -name '*.apk' -not -path '*/.git/*' || true
+          echo "===== outputs tree ====="
+          ls -la "$GITHUB_WORKSPACE/build/app/outputs" 2>/dev/null || true
+          ls -la "$GITHUB_WORKSPACE/build/app/outputs/apk/release" 2>/dev/null || true
+          ls -la "$GITHUB_WORKSPACE/build/app/outputs/flutter-apk" 2>/dev/null || true
+          if [ "$BUILD_STATUS" -ne 0 ]; then
+            echo "===== Gradle rerun with diagnostics ====="
+            ( cd android && ./gradlew assembleRelease --console=plain --stacktrace ) 2>&1 | tail -120
+          fi
+          exit "$BUILD_STATUS"
 
       - name: Upload APK artifact
         uses: actions/upload-artifact@v4

@@ -1,3 +1,4 @@
+```yaml
 name: Build NetBand APK
 
 on:
@@ -38,24 +39,30 @@ jobs:
           distribution: temurin
           java-version: '17'
 
-      - name: Set up Flutter
+      - name: Set up Flutter and Dart
         uses: subosito/flutter-action@v2
         with:
           channel: stable
           cache: true
-          cache-key: flutter-${{ runner.os }}-${{ hashFiles('pubspec.lock') }}
+          cache-dependency-path: pubspec.lock
 
-      # The supplied source archive intentionally excludes generated SDK paths and
-      # build caches. Generate any missing standard Flutter Android wrapper files
-      # without asking Flutter to overwrite the custom Kotlin/Gradle files.
+      - name: Verify toolchain
+        run: |
+          flutter --version
+          dart --version
+          dart --version | grep -E 'Dart SDK version: 3\.(1[0-9]|[2-9][0-9])\.'
+
       - name: Complete Flutter Android scaffolding
         run: flutter create --platforms=android --project-name netband --org com.netband .
 
-      - name: Install Dart dependencies
+      - name: Install dependencies
         run: flutter pub get
 
       - name: Analyze Dart source
         run: flutter analyze
+
+      - name: Run tests
+        run: flutter test
 
       - name: Build release APK
         run: flutter build apk --release
@@ -67,3 +74,4 @@ jobs:
           path: build/app/outputs/flutter-apk/app-release.apk
           if-no-files-found: error
           retention-days: 14
+```
